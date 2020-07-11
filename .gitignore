@@ -1,0 +1,7 @@
+
+.mypy*
+*egg-info*
+*.pyc
+tags
+_vizdoom.ini
+*.npy
