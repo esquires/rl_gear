@@ -1,5 +1,7 @@
 # RL Gear
 
+[![Build Status](https://travis-ci.com/esquires/rl_gear.svg?branch=master)](https://travis-ci.com/esquires/rl_gear)
+
 This project makes setting up new research projects with
 [ray](https://docs.ray.io/en/latest/index.html) a bit more turn-key.
 
@@ -8,9 +10,20 @@ This project makes setting up new research projects with
 `rl_gear` is designed to work with ray version 0.8.5 or later
 and has been tested with python 3.6.
 
+First install `tensorflow` and `pytorch`. cpu-only `tensorflow` is
+fine since `rl_gear` doesn't use any neural network
+operations from `tensorflow`.
+
+Second, you may need to install opencv since `ray/rllib/env/atari_wrappers.py`
+requires the `cv2` package but `opencv` is not installed automatically with
+`ray`. It can be installed on Ubuntu with `apt install python3-opencv`.
+
+Thid, install the package.
 ```bash
     pip install .
 ```
+
+See the `Dockerfile` for a minimal example of how to install on Ubuntu 18.04.
 
 ## Usage
 

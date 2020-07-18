@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 
 
-if __name__ == '__main__':
+def test_style() -> None:
     python_paths = \
         (Path(__file__).resolve().parent.parent).rglob('*.py')
     python_files = [str(p) for p in python_paths]
@@ -16,3 +16,7 @@ if __name__ == '__main__':
     subprocess.check_call(
         ['mypy'] + python_files +
         ['--disallow-untyped-defs', '--ignore-missing-imports'])
+
+
+if __name__ == '__main__':
+    test_style()

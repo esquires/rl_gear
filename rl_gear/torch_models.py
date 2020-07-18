@@ -62,7 +62,7 @@ def dqn_cnn(obs_shape: Sequence[int]) -> Tuple[List[nn.Module], List[int]]:
     kernels = [8, 4, 4]
     strides = [4, 2, 2]
 
-    cnn_layers = []
+    cnn_layers: List[nn.Module] = []
     out_shp = np.asarray(obs_shape[:-1])
     for in_c, out_c, k, s in \
             zip(channels[:-1], channels[1:], kernels, strides):
@@ -82,18 +82,18 @@ class TorchForwardModel(TorchModelV2, nn.Module):
         self._cur_value = None
 
     def _make_linear_head(self, inp_size: int) -> None:
-        self.pi_layer = nn.Linear(inp_size, self.num_outputs)
+        self.pi_layer = nn.Linear(inp_size, self.num_outputs)  # type: ignore
         self.v_layer = nn.Linear(inp_size, 1)
         init_modules([self.pi_layer, self.v_layer])
 
-    def _forward_helper(self, x: torch.tensor) -> torch.tensor:
+    def _forward_helper(self, x: torch.Tensor) -> torch.Tensor:
         logits = self.pi_layer(x)
         self._cur_value = self.v_layer(x).squeeze(1)
         self._last_output = logits
         return logits
 
     @override(TorchModelV2)
-    def value_function(self) -> torch.tensor:
+    def value_function(self) -> torch.Tensor:
         assert self._cur_value is not None, "must call forward() first"
         return self._cur_value
 
@@ -109,17 +109,17 @@ class FCNet(TorchModelV2, nn.Module):
             self, obs_space, action_space, num_outputs, model_config, name)
         nn.Module.__init__(self)
 
-        def make_layers() -> nn.Module:
+        def make_layers() -> List[nn.Module]:
             num_inp = np.product(obs_space.shape)
             sizes = [num_inp] + model_config['fcnet_hiddens']
-            layers = []
+            layers: List[nn.Module] = []
             for inp_size, out_size in zip(sizes[:-1], sizes[1:]):
                 layers.append(nn.Linear(inp_size, out_size))
                 layers.append(nn.ReLU())
             return layers
 
-        self.pi_network = nn.Sequential(*make_layers())
-        self.v_network = nn.Sequential(*make_layers())
+        self.pi_network = nn.Sequential(*make_layers())  # type: ignore
+        self.v_network = nn.Sequential(*make_layers())  # type: ignore
 
         self.pi_layer = \
             nn.Linear(model_config['fcnet_hiddens'][-1], num_outputs)
@@ -133,9 +133,9 @@ class FCNet(TorchModelV2, nn.Module):
     @override(TorchModelV2)
     def forward(
             self,
-            input_dict: Dict[str, torch.tensor],
-            state: list,
-            seq_lens: torch.tensor) -> torch.tensor:
+            input_dict: Dict[str, torch.Tensor],
+            state: List[torch.Tensor],
+            seq_lens: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
 
         self.pi_emb = self.pi_network(input_dict['obs'])
         self.v_emb = self.pi_network(input_dict['obs'])
@@ -146,7 +146,7 @@ class FCNet(TorchModelV2, nn.Module):
         return logits, state
 
     @override(TorchModelV2)
-    def value_function(self) -> torch.tensor:
+    def value_function(self) -> torch.Tensor:
         assert self._cur_value is not None, "must call forward() first"
         return self._cur_value
 
@@ -169,9 +169,9 @@ class TorchDQNModel(TorchForwardModel):
     @override(TorchModelV2)
     def forward(
             self,
-            input_dict: Dict[str, torch.tensor],
-            state: list,
-            seq_lens: torch.tensor) -> torch.tensor:
+            input_dict: Dict[str, torch.Tensor],
+            state: List[torch.Tensor],
+            seq_lens: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         x = input_dict['obs'].float().permute(0, 3, 1, 2) / 255.0
         x = self.cnn(x)
         x = self.fc(x.reshape(x.size(0), -1))
@@ -203,14 +203,14 @@ class TorchImpalaModel(TorchForwardModel):
     @override(TorchModelV2)
     def forward(
             self,
-            input_dict: Dict[str, torch.tensor],
-            state: list,
-            seq_lens: torch.tensor) -> torch.tensor:
+            input_dict: Dict[str, torch.Tensor],
+            state: List[torch.Tensor],
+            seq_lens: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
 
         x = input_dict['obs'].float().permute(0, 3, 1, 2) / 255.0
         for conv, res_block_group in zip(self.convs, self.res_blocks):
             x = conv(x)
-            for res_block in res_block_group:
+            for res_block in res_block_group:  # type: ignore
                 x = x + res_block(x)
 
         self.cnn_emb = x
@@ -250,7 +250,7 @@ class TorchImpalaModel(TorchForwardModel):
 
         for in_c, out_c in zip(channels[:-1], channels[1:]):
 
-            layers = []
+            layers: List[nn.Module] = []
             padding, out_shp = conv_padding(out_shp)
             layers.append(nn.ZeroPad2d(padding))
             layers.append(conv2d(in_c, out_c))
@@ -267,7 +267,7 @@ class TorchImpalaModel(TorchForwardModel):
                 padding = conv_padding(out_shp)[0]
 
                 for _ in range(2):
-                    res_block = []
+                    res_block: List[nn.Module] = []
                     res_block.append(nn.ReLU())
                     res_block.append(nn.ZeroPad2d(padding))
                     res_block.append(conv2d(out_c, out_c))

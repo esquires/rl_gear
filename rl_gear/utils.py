@@ -18,6 +18,7 @@ import matplotlib.ticker as mtick
 import yaml
 import git
 
+# pylint: disable=no-name-in-module
 from tensorflow.python.summary.summary_iterator import summary_iterator
 
 StrOrPath = Union[str, Path]
@@ -243,7 +244,7 @@ def shorten_dfs(_dfs: Sequence[pd.DataFrame]) -> None:
 
 def find_tb_fnames(base_dir: str) -> List[List[Path]]:
     tb_fnames = Path(base_dir).rglob('events.out.tfevents*')
-    tb_grouped_fnames = collections.defaultdict(list)
+    tb_grouped_fnames: dict = collections.defaultdict(list)
     for f in tb_fnames:
         tb_grouped_fnames[f.parent].append(f)
 

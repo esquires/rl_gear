@@ -79,7 +79,7 @@ def make_basic_rllib_config(
 
     resources = ray.cluster_resources()
     max_num_workers = int(resources['CPU']) - 1
-    gpu_avail = int(np.clip(int(resources['GPU']), 0, 1))
+    gpu_avail = int(np.clip(int(resources.get('GPU', 0)), 0, 1))
 
     inputs = get_inputs(yaml_file, search_dirs)
     params = parse_inputs(inputs)
@@ -113,10 +113,6 @@ def make_basic_rllib_config(
         kwargs['config']['num_workers'] = max_num_workers
 
     kwargs['config']['callbacks'] = InfoToCustomMetricsCallback
-
-    if 'timesteps_total' in params['rllib']:
-        kwargs['stop'] = {'timesteps_total':
-                          int(float(params['rllib']['timesteps_total']))}
 
     return params, kwargs
 

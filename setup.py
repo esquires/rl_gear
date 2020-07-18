@@ -10,12 +10,19 @@ setup(
     packages=['rl_gear'],
     install_requires=[
         "git-python",
-        "crc32c",
+        "tabulate",
+        "pandas",
+        "matplotlib",
+        "gym",
+        # ray packages
         "ray[debug]",
         "ray[tune]",
         "ray[rllib]",
+        # extra rllib dependencies that don't come through automatically
+        "crc32c",
+        "requests",
         "dm-tree",
-        "tabulate",
+        "lz4",
     ],
     entry_points={
         'console_scripts':

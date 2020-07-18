@@ -15,7 +15,7 @@ def test_cartpole() -> None:
     trial = exp.get_best_trial('episode_reward_mean')
     last_rew = trial.metric_analysis['episode_reward_mean']['last']
 
-    assert last_rew > 100
+    assert last_rew > 50
 
 
 if __name__ == '__main__':
