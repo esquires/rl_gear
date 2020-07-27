@@ -84,6 +84,7 @@ def make_basic_rllib_config(
     inputs = get_inputs(yaml_file, search_dirs)
     params = parse_inputs(inputs)
 
+    # override the non-rllib blocks
     if overrides is not None:
         params = ray.tune.utils.merge_dicts(params, overrides)
 
@@ -106,6 +107,11 @@ def make_basic_rllib_config(
 
     for blk in params['rllib']['tune_kwargs_blocks'].split(','):
         kwargs = ray.tune.utils.merge_dicts(kwargs, params['rllib'][blk])
+
+    # override the rllib blocks
+    if overrides is not None:
+        params = ray.tune.utils.merge_dicts(params, overrides)
+        kwargs = ray.tune.utils.merge_dicts(kwargs, overrides.get('rllib', {}))
 
     if kwargs['config']['num_workers'] > max_num_workers:  # type: ignore
         warnings.warn(

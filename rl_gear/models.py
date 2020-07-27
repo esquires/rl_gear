@@ -8,8 +8,10 @@ import torch
 import torch.nn as nn
 
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
+from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.utils.annotations import override
 from ray.rllib.models.torch.misc import valid_padding
+from ray.rllib.policy.rnn_sequencing import add_time_dimension
 
 
 def xavier_init(m: nn.Module) -> None:
@@ -163,7 +165,7 @@ class TorchDQNModel(TorchForwardModel):
         self.fc = nn.Sequential(
             nn.ReLU(), nn.Linear(int(np.prod(out_shp)), 512), nn.ReLU())
         self._make_linear_head(512)
-        init_modules([self.cnn, self.fc, self.pi_layer])
+        init_modules([self.cnn, self.fc])
 
     # pylint: disable=unused-argument
     @override(TorchModelV2)
@@ -176,6 +178,62 @@ class TorchDQNModel(TorchForwardModel):
         x = self.cnn(x)
         x = self.fc(x.reshape(x.size(0), -1))
         return self._forward_helper(x), state
+
+
+class TorchDQNLSTMModel(TorchForwardModel):
+    def __init__(
+            self, obs_space: gym.Space, action_space: gym.Space,
+            num_outputs: int, model_config: dict, name: str):
+
+        super().__init__(obs_space, action_space, num_outputs, model_config,
+                         name)
+        self.lstm_cell_size = model_config['lstm_cell_size']
+        cnn_layers, out_shp = dqn_cnn(obs_space.shape)
+        self.cnn = nn.Sequential(*cnn_layers)
+        self.lstm = nn.LSTM(
+            int(np.prod(out_shp)), self.lstm_cell_size, batch_first=True)
+
+        self._make_linear_head(self.lstm_cell_size)
+
+        init_modules([self.cnn, self.lstm])
+        self._cur_value = None
+
+    @override(TorchModelV2)
+    def forward(
+            self,
+            input_dict: Dict[str, torch.Tensor],
+            state: List[torch.Tensor],
+            seq_lens: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+
+        # first apply the cnn
+        x = input_dict['obs'].float().permute(0, 3, 1, 2) / 255.0
+        x = self.cnn(x)
+
+        # add time
+        x_flat = x.view(x.shape[0], -1)
+        x = add_time_dimension(x_flat, seq_lens, "torch")
+
+        # apply lstm
+        # pylint: disable=no-member
+        x, state_out = self.lstm(
+            x, (torch.unsqueeze(state[0], 0), torch.unsqueeze(state[1], 0)))
+
+        # pylint: disable=no-member
+        x = torch.reshape(x, [-1, self.lstm_cell_size])
+
+        return self._forward_helper(x), [
+            torch.squeeze(state_out[0], 0),
+            torch.squeeze(state_out[1], 0)]
+
+    @override(ModelV2)
+    def get_initial_state(self) -> List[torch.Tensor]:
+        # make hidden states on same device as model
+        new = self.cnn[-2].weight.new  # type: ignore
+        h = [
+            new(1, self.lstm_cell_size).zero_().squeeze(0),  # type: ignore
+            new(1, self.lstm_cell_size).zero_().squeeze(0),  # type: ignore
+        ]
+        return h
 
 
 class TorchImpalaModel(TorchForwardModel):
