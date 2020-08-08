@@ -26,7 +26,7 @@ Thid, install the package.
 See the `Dockerfile` for a minimal example of how to install on Ubuntu 18.04.
 To build it locally, run
 ```bash
-    docker build -t latest .
+    docker build -t rl_gear:latest .
 ```
 
 ## Usage

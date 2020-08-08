@@ -1,5 +1,5 @@
 import functools
-from typing import Dict, Sequence, Union, Any, Iterable, List, Tuple
+from typing import Dict, Sequence, Union, Any, Iterable, List, Tuple, Optional
 
 import numpy as np
 import gym
@@ -17,7 +17,7 @@ from ray.rllib.policy.rnn_sequencing import add_time_dimension
 def xavier_init(m: nn.Module) -> None:
     if isinstance(m, (nn.Linear, nn.Conv2d)):
         nn.init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
+        m.bias.data.fill_(0.01)  # type: ignore
 
 
 def init_modules(modules: Iterable[nn.Module]) -> None:
@@ -88,9 +88,12 @@ class TorchForwardModel(TorchModelV2, nn.Module):
         self.v_layer = nn.Linear(inp_size, 1)
         init_modules([self.pi_layer, self.v_layer])
 
-    def _forward_helper(self, x: torch.Tensor) -> torch.Tensor:
-        logits = self.pi_layer(x)
-        self._cur_value = self.v_layer(x).squeeze(1)
+    def _forward_helper(
+            self, x_pi: torch.Tensor, x_v: Optional[torch.Tensor] = None) \
+            -> torch.Tensor:
+        logits = self.pi_layer(x_pi)
+        self._cur_value = \
+            self.v_layer(x_v if x_v is not None else x_pi).squeeze(1)
         self._last_output = logits
         return logits
 
@@ -101,15 +104,14 @@ class TorchForwardModel(TorchModelV2, nn.Module):
 
 
 # pylint: disable=too-many-instance-attributes
-class FCNet(TorchModelV2, nn.Module):
+class FCNet(TorchForwardModel):
     """Same as torch/fcnet.py in rllib but does not share pi/value layers."""
 
     def __init__(
             self, obs_space: gym.Space, action_space: gym.Space,
             num_outputs: int, model_config: dict, name: str):
-        TorchModelV2.__init__(
-            self, obs_space, action_space, num_outputs, model_config, name)
-        nn.Module.__init__(self)
+        super().__init__(
+            obs_space, action_space, num_outputs, model_config, name)
 
         def make_layers() -> List[nn.Module]:
             num_inp = np.product(obs_space.shape)
@@ -122,14 +124,8 @@ class FCNet(TorchModelV2, nn.Module):
 
         self.pi_network = nn.Sequential(*make_layers())  # type: ignore
         self.v_network = nn.Sequential(*make_layers())  # type: ignore
-
-        self.pi_layer = \
-            nn.Linear(model_config['fcnet_hiddens'][-1], num_outputs)
-        self.v_layer = \
-            nn.Linear(model_config['fcnet_hiddens'][-1], 1)
-
-        init_modules(
-            [self.pi_network, self.v_network, self.pi_layer, self.v_layer])
+        self._make_linear_head(model_config['fcnet_hiddens'][-1])
+        init_modules([self.pi_network, self.v_network])
 
     # pylint: disable=unused-argument
     @override(TorchModelV2)
@@ -140,12 +136,8 @@ class FCNet(TorchModelV2, nn.Module):
             seq_lens: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
 
         self.pi_emb = self.pi_network(input_dict['obs'])
-        self.v_emb = self.pi_network(input_dict['obs'])
-
-        logits = self.pi_layer(self.pi_emb)
-        self._cur_value = self.v_layer(self.v_emb).squeeze(1)
-        self._last_output = logits
-        return logits, state
+        self.v_emb = self.v_network(input_dict['obs'])
+        return self._forward_helper(self.pi_emb, self.v_emb), state
 
     @override(TorchModelV2)
     def value_function(self) -> torch.Tensor:

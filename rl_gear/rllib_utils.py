@@ -1,10 +1,11 @@
 import argparse
+import re
 import os
 from pathlib import Path
 import sys
 import json
 import warnings
-from typing import Tuple, Any, Iterable, Union, Dict
+from typing import Tuple, Any, Iterable, Union, Dict, List
 
 import numpy as np
 
@@ -17,7 +18,8 @@ from .utils import MetaWriter, get_inputs, parse_inputs, get_log_dir, \
     StrOrPath
 
 
-def make_rllib_metadata_logger(meta_data_writer: MetaWriter) -> Any:
+def make_rllib_metadata_logger(meta_data_writer: MetaWriter) \
+        -> ray.tune.logger.Logger:
     class RllibLogMetaData(ray.tune.logger.Logger):
         def _init(self) -> None:
             self.meta_data_writer = meta_data_writer
@@ -62,6 +64,18 @@ def make_rllib_metadata_logger(meta_data_writer: MetaWriter) -> Any:
     return RllibLogMetaData
 
 
+def make_filtered_tblogger(regex_filters: List[str]) \
+        -> ray.tune.logger.Logger:
+    class FilteredTbLogger(ray.tune.logger.TBXLogger):
+        def on_result(self, result: dict) -> None:
+            result['custom_metrics'] = \
+                {k: v for k, v in result['custom_metrics'].items()
+                 if not any([re.search(r, k) for r in regex_filters])}
+            super().on_result(result)
+
+    return FilteredTbLogger
+
+
 def add_rlgear_args(parser: argparse.ArgumentParser) \
         -> argparse.ArgumentParser:
     parser.add_argument('yaml_file')
@@ -90,19 +104,26 @@ def make_basic_rllib_config(
 
     log_dir = get_log_dir(params['log'], yaml_file, exp_name)
 
+    loggers = list(ray.tune.logger.DEFAULT_LOGGERS)
+
     meta_data_writer = MetaWriter(
         repo_roots=[Path.cwd()] + params['git_repos'], files=inputs)
-    meta_logger = make_rllib_metadata_logger(meta_data_writer)
+    loggers.append(make_rllib_metadata_logger(meta_data_writer))
+
+    if 'tb_filters' in params['log']:
+        loggers = \
+            [l for l in loggers if l is not ray.tune.logger.TBXLogger]  # NOQA
+        loggers.append(make_filtered_tblogger(params['log']['tb_filters']))
 
     # provide defaults that can be overriden in the yaml file
-    kwargs = {
+    kwargs: dict = {
         'config': {
             "log_level": "INFO",
             "num_workers": max_num_workers,
             "num_gpus": gpu_avail,
         },
         'local_dir': str(log_dir),
-        'loggers': ray.tune.logger.DEFAULT_LOGGERS + (meta_logger,)
+        'loggers': loggers
     }
 
     for blk in params['rllib']['tune_kwargs_blocks'].split(','):
